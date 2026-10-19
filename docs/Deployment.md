@@ -93,16 +93,4 @@ flowchart TB
   表示は R2 の公開 URL から直接行う。API は R2 上のファイルの確認・コピー・削除も行う。
 - **通知メール**: API は送信予約（outbox）を DB に書く。Cloud Scheduler が 1 分ごとに API を呼んで送信処理を起動し（実装予定）、Resend で送る。
 
-## 未決事項（issue）
 
-構成図の破線部分や確認中の項目は、次の issue で決める。
-
-| 内容 | issue |
-|---|---|
-| outbox を Cloud Scheduler から起動する実装 | NatuIve_API #217 |
-| Supabase への接続方式と、PostgreSQL 17・`pg_trgm` が使えるかの確認 | NatuIve_API #213 |
-| DB を Auth と同じ Supabase プロジェクトに置くか | NatuIve_API #214 |
-| API の独自ドメインの割り当て方法 | NatuIve_API #221 |
-| API 側の CORS（本番のフロントのオリジンを許可する） | NatuIve_API #218 |
-| バックエンドの CI/CD（GitHub Actions か Cloud Build か） | NatuIve_API #219 |
-| フロントのドメイン・画像最適化・CI/CD など | NatuIve_Web_Frontend の `docs/Deployment.md`「未決事項・今後の作業」 |
