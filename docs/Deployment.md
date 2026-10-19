@@ -9,7 +9,6 @@
 | DB | Supabase の PostgreSQL（東京） | 同上 |
 | 認証 | Supabase Auth（既存のプロジェクト） | 同上 |
 | Web フロントエンド | Cloudflare Workers（Paid）＋OpenNext | [NatuIve_Web_Frontend: docs/Deployment.md](https://github.com/GokujyouKaisennDonnburi/NatuIve_Web_Frontend/blob/main/docs/Deployment.md)・ADR-0001 |
-| モバイルアプリ | 本書の対象外（API と Supabase Auth を直接呼ぶ想定） | [NatuIve_Mobile](https://github.com/GokujyouKaisennDonnburi/NatuIve_Mobile) |
 
 ## 構成図
 
@@ -17,12 +16,12 @@
 flowchart TB
     subgraph clients["利用者"]
         browser["Web ブラウザ"]
-        mobile["モバイルアプリ<br/>iOS・Android（KMP）"]
     end
 
-    subgraph cloudflare["Cloudflare"]
+    subgraph cloudflare["Cloudflare（Workers Paid はフロントと中継で共有）"]
         dns["DNS<br/>natuportal.org"]
-        workers["Workers（Paid）<br/>Next.js（OpenNext）<br/>SSR＋静的ファイル配信"]
+        workers["Workers: Web フロント<br/>Next.js（OpenNext）<br/>SSR＋静的ファイル配信"]
+        relay["Workers: natueve-api-relay<br/>API の中継"]
         r2[("R2<br/>画像・PDF")]
     end
 
@@ -42,11 +41,12 @@ flowchart TB
     github["GitHub<br/>ソースコード"]
 
     browser -->|"ページの取得"| workers
-    clients -->|"API 呼び出し（JWT 付き）"| run
+    clients -->|"API 呼び出し（JWT 付き）"| relay
     clients -->|"ログイン"| auth
     browser -->|"アップロード（署名付き URL へ PUT）"| r2
     browser -->|"画像の表示（公開 URL）"| r2
-    workers -.->|"SSR からの API 呼び出し（OGP・予定）"| run
+    workers -.->|"SSR からの API 呼び出し（OGP・予定）"| relay
+    relay -->|"秘密ヘッダーと利用者 IP を付けて転送（run.app の URL）"| run
 
     scheduler -->|"outbox の処理（実装予定）"| run
     run -->|"SQL"| db
@@ -57,7 +57,7 @@ flowchart TB
     registry -.->|"コンテナイメージ（予定）"| run
 
     dns -.->|"サブドメインの割り当て（予定）"| workers
-    dns -.->|"API の独自ドメイン（DNS の置き場所・割り当て方法は未決）"| run
+    dns -->|"natueve-api.natuportal.org"| relay
 
     github -.->|"自動ビルド・デプロイ（Workers Builds・予定）"| workers
     github -.->|"自動ビルド・デプロイ・マイグレーション（方式は未決）"| registry
@@ -67,8 +67,8 @@ flowchart TB
     classDef planned fill:#4a4a4a,stroke:#2a2a2a,color:#fff,stroke-dasharray: 5 5
     classDef datastore fill:#5c4a1e,stroke:#352b0d,color:#fff
 
-    class workers,run,scheduler confirmed
-    class auth,resend,dns,browser,mobile,github existing
+    class workers,relay,run,scheduler confirmed
+    class auth,resend,dns,browser,github existing
     class secrets,registry planned
     class db,r2 datastore
 ```
@@ -87,8 +87,8 @@ flowchart TB
 ## 主な流れ
 
 - **ページの表示**: ブラウザは Cloudflare Workers からページを受け取る。Next.js が SSR で返し、JS・CSS などの静的ファイルはそのまま配信される。
-- **データの取得・投稿**: ブラウザとモバイルアプリは、Cloud Run の API を JWT 付きで直接呼ぶ。API は Supabase の PostgreSQL を読み書きする。
-- **ログイン**: ブラウザとモバイルアプリは Supabase Auth でログインし、JWT を受け取る。API は Supabase Auth の JWKS で JWT を検証する。
+- **データの取得・投稿**: ブラウザは、Cloud Run の API を JWT 付きで直接呼ぶ。API は Supabase の PostgreSQL を読み書きする。
+- **ログイン**: ブラウザは Supabase Auth でログインし、JWT を受け取る。API は Supabase Auth の JWKS で JWT を検証する。
 - **画像・PDF**: ブラウザは API から署名付き URL を受け取り（`POST /api/v1/uploads/presign`）、その URL へ直接 PUT してアップロードする。
   表示は R2 の公開 URL から直接行う。API は R2 上のファイルの確認・コピー・削除も行う。
 - **通知メール**: API は送信予約（outbox）を DB に書く。Cloud Scheduler が 1 分ごとに API を呼んで送信処理を起動し（実装予定）、Resend で送る。
